@@ -1,6 +1,5 @@
 import React from 'react';
 import Head from 'next/head'
-import Script from 'next/script'
 import Image from 'next/image'
 import Draggable from 'react-draggable';
 import BigNumber from 'bignumber.js';
@@ -71,8 +70,10 @@ export default function Default() {
   const [width, height] = useWindowSize();
 
   const spawnStraySheep = () => {
-    const esheep = new window.eSheep();
-    esheep.Start();
+    if (window.eSheep) {
+      const esheep = new window.eSheep();
+      esheep.Start();
+    }
   };
   React.useEffect(() => {
     if (window.eSheep) {
@@ -117,7 +118,7 @@ export default function Default() {
   console.log(windowSizes)
   return (
     <>
-    <Head>
+      <Head>
         <meta charset="utf-8" />
         <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -127,109 +128,108 @@ export default function Default() {
           content="n00d"
         />
         <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-        <Script src="https://adrianotiger.github.io/web-esheep/dist/esheep.min.js"></Script>
         <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
         <title>n00dleSwap</title>
       </Head>
       <Wrapper>
-      <GlobalStyles></GlobalStyles>
-      <ThemeProvider theme={original}>
-        {
-          windowStack.map((window, i) => {
-            return (
-              <Rnd
-                key={window + i}
-                onDragStop={(e, data) => {
-                  setWindowPositions(pos => {
-                    return {  ...pos, [window]: data }
-                  });
-                }}
-                onResizeStop={(e, data, ref) => {
-                  setWindowSizes(sizes => {
-                    return {  ...sizes, [window]: ref.style }
-                  });
-                  //e.stopImmediatePropagation()
-                }}
-                onClick={
-                  () => {
-                    setWindowStack({ action: 'focus', window: window });
-                    setIexploreWindow(!iexploreWindow);
+        <GlobalStyles></GlobalStyles>
+        <ThemeProvider theme={original}>
+          {
+            windowStack.map((window, i) => {
+              return (
+                <Rnd
+                  key={window + i}
+                  onDragStop={(e, data) => {
+                    setWindowPositions(pos => {
+                      return { ...pos, [window]: data }
+                    });
                   }}
-                default={{
-                  x: (width / 2 - 200) + (i * 40),
-                  y: 50 + (i * 40),
-                  width: 1000,
-                }}
-                position={windowPositions[window]}
-                size={windowSizes[window]}
-                minWidth={300}
-                dragHandleClassName="window-header"
-                enableResizing={{
-                  bottom: true,
-                  bottomLeft: false,
-                  bottomRight: true,
-                  left: false,
-                  right: true,
-                  top: false,
-                  topLeft: false,
-                  topRight: false
-                }}
-                maxWidth={'100vw'}
-              >
-                <Window  style={{ width: '100%', height: '100%' }} className="window">
+                  onResizeStop={(e, data, ref) => {
+                    setWindowSizes(sizes => {
+                      return { ...sizes, [window]: ref.style }
+                    });
+                    //e.stopImmediatePropagation()
+                  }}
+                  onClick={
+                    () => {
+                      setWindowStack({ action: 'focus', window: window });
+                      setIexploreWindow(!iexploreWindow);
+                    }}
+                  default={{
+                    x: (width / 2 - 200) + (i * 40),
+                    y: 50 + (i * 40),
+                    width: 1000,
+                  }}
+                  position={windowPositions[window]}
+                  size={windowSizes[window]}
+                  minWidth={300}
+                  dragHandleClassName="window-header"
+                  enableResizing={{
+                    bottom: true,
+                    bottomLeft: false,
+                    bottomRight: true,
+                    left: false,
+                    right: true,
+                    top: false,
+                    topLeft: false,
+                    topRight: false
+                  }}
+                  maxWidth={'100vw'}
+                >
+                  <Window style={{ width: '100%', height: '100%' }} className="window">
 
-                  <WindowHeader active={i === windowStack.length - 1} className='window-header'>
-                    <span>{window}.exe</span>
-                    <div style={{ display: 'flex', justifyContent: 'space-evenly', gap: '0.25rem' }}>
-                      {/* <Button onClick={(event) => {
+                    <WindowHeader active={i === windowStack.length - 1} className='window-header'>
+                      <span>{window}.exe</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-evenly', gap: '0.25rem' }}>
+                        {/* <Button onClick={(event) => {
                         setWindowStack({ action: 'max', window: win });
                       }}>
                       </Button> */}
-                      <Button onClick={(event) => {
-                        setWindowStack({ action: 'del', window: window });
-                        setWelcomeWindow(!welcomeWindow);
-                        event.stopPropagation();
-                      }}>
-                        <span className='close-icon' />
-                      </Button>
-                    </div>
-                  </WindowHeader><div style={{overflowY: 'scroll', overflowX: 'hidden', height: 'calc(100% - 2.5em)'}}>{windows[window]}</div>
-                </Window>
-              </Rnd>
-            );
+                        <Button onClick={(event) => {
+                          setWindowStack({ action: 'del', window: window });
+                          setWelcomeWindow(!welcomeWindow);
+                          event.stopPropagation();
+                        }}>
+                          <span className='close-icon' />
+                        </Button>
+                      </div>
+                    </WindowHeader><div style={{ overflowY: 'scroll', overflowX: 'hidden', height: 'calc(100% - 2.5em)' }}>{windows[window]}</div>
+                  </Window>
+                </Rnd>
+              );
+            }
+
+
+            )
           }
 
-
-          )
-        }
-
-        <AppBar>
-          <Toolbar style={{ justifyContent: 'space-between' }}>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <Button
-                onClick={() => setOpen(!open)}
-                active={open}
-                style={{ fontWeight: 'bold' }}
-              >
-                <Image src="/assets/noodlogo.png" alt="Vercel Logo" width={20} height={20} marginRight={4} />
-                Start
-              </Button>
-              {open && (
-                <List
-                  style={{
-                    position: 'absolute',
-                    left: '0',
-                    top: '100%',
-                  }}
-                  onClick={() => setOpen(false)}
+          <AppBar>
+            <Toolbar style={{ justifyContent: 'space-between' }}>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <Button
+                  onClick={() => setOpen(!open)}
+                  active={open}
+                  style={{ fontWeight: 'bold' }}
                 >
-                  <ListItem disabled={address} onClick={connect}>
-                    <span role='img' aria-label='🔗'>
-                      🔗
-                    </span>
-                    {address ? 'Connected' : 'Connect Wallet'}
-                  </ListItem>
-                  {/* <Divider></Divider>
+                  <Image src="/assets/noodlogo.png" alt="Vercel Logo" width={20} height={20} marginRight={4} />
+                  Start
+                </Button>
+                {open && (
+                  <List
+                    style={{
+                      position: 'absolute',
+                      left: '0',
+                      top: '100%',
+                    }}
+                    onClick={() => setOpen(false)}
+                  >
+                    <ListItem disabled={address} onClick={connect}>
+                      <span role='img' aria-label='🔗'>
+                        🔗
+                      </span>
+                      {address ? 'Connected' : 'Connect Wallet'}
+                    </ListItem>
+                    {/* <Divider></Divider>
                   <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'x' })}>
                     <span role='img' aria-label='👨‍🍳' >
                       👨‍🍳
@@ -242,57 +242,57 @@ export default function Default() {
                     </span>
                     Dining Table (Staking)
                   </ListItem> */}
-                  <Divider />
-                  <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'nftselector' })}>
-                    <span role='img' aria-label='🤑' >
-                      🤑
-                    </span>
-                    List your NFT
-                  </ListItem>
-                  <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'createoffer' })}>
-                    <span role='img' aria-label='💱' >
-                      💱
-                    </span>
-                    Create offer for NFT
-                  </ListItem>
-                  <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'mypools' })}>
-                    <span role='img' aria-label='🏊' >
-                      🏊
-                    </span>
-                    My Pools
-                  </ListItem>
-                  <Divider></Divider>
-                  <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'sweep' })}>
-                    <span role='img' aria-label='🔀'>
-                      🔀
-                    </span>
-                    Sweep NFTs
-                  </ListItem>
-                  <Divider />
+                    <Divider />
+                    <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'nftselector' })}>
+                      <span role='img' aria-label='🤑' >
+                        🤑
+                      </span>
+                      List your NFT
+                    </ListItem>
+                    <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'createoffer' })}>
+                      <span role='img' aria-label='💱' >
+                        💱
+                      </span>
+                      Create offer for NFT
+                    </ListItem>
+                    <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'mypools' })}>
+                      <span role='img' aria-label='🏊' >
+                        🏊
+                      </span>
+                      My Pools
+                    </ListItem>
+                    <Divider></Divider>
+                    <ListItem disabled={!address} onClick={() => setWindowStack({ action: 'push', window: 'sweep' })}>
+                      <span role='img' aria-label='🔀'>
+                        🔀
+                      </span>
+                      Sweep NFTs
+                    </ListItem>
+                    <Divider />
 
-                  <ListItem onClick={() => {
-                    setWindowStack({ action: 'push', window: 'n00d' });
-                    setWelcomeWindow(true);
-                  }}>
-                    <span role='img' aria-label='👨‍💻'>
-                      👨‍💻
-                    </span>
-                    Info
-                  </ListItem>
-                  <ListItem onClick={() => {
-                    spawnStraySheep();
-                  }}>
-                    straysheep.exe
-                  </ListItem>
-                </List>
-              )}
-            </div>
-          </Toolbar>
-        </AppBar>
+                    <ListItem onClick={() => {
+                      setWindowStack({ action: 'push', window: 'n00d' });
+                      setWelcomeWindow(true);
+                    }}>
+                      <span role='img' aria-label='👨‍💻'>
+                        👨‍💻
+                      </span>
+                      Info
+                    </ListItem>
+                    <ListItem onClick={() => {
+                      spawnStraySheep();
+                    }}>
+                      straysheep.exe
+                    </ListItem>
+                  </List>
+                )}
+              </div>
+            </Toolbar>
+          </AppBar>
 
-      </ThemeProvider>
+        </ThemeProvider>
 
-    </Wrapper>
+      </Wrapper>
     </>
 
   );
