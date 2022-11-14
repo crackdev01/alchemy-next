@@ -25,7 +25,7 @@ const routerAddress = {
 }
 
 const alchemyAddress = {
-  '5': 'https://eth-goerli.g.alchemy.com/v2/' + process.env.REACT_APP_ALCHEMY_API_TOKEN
+  '5': 'https://eth-goerli.g.alchemy.com/v2/' + process.env.NEXT_PUBLIC_REACT_APP_ALCHEMY_API_TOKEN
 }
 const wethAddress = {
   '5': '0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6'
@@ -33,6 +33,7 @@ const wethAddress = {
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
 export function Swap() {
   /**
    * Wagmi/Web3 setup
@@ -68,7 +69,15 @@ export function Swap() {
     else p[o.poolAddress] = [o.id]
     return p
   }, {})
-  const nftsToBuy=Object.keys(offersPerPool || {})?.map(address => ([address, offersPerPool[address]]))
+  const allOffersPerPool = offers?.reduce((p, c) => {
+    if (!p[c.pool]) {
+      p[c.pool] = [];
+    }
+    p[c.pool].push(c);
+    return p;
+  }, {});
+  const [selectedBuyNfts, setSelectedBuyNfts] = React.useState({});
+  const nftsToBuy = Object.keys(selectedBuyNfts || {})?.map(address => ([address, selectedBuyNfts[address]]))
 
   /**
    * Wagmi calls
@@ -260,22 +269,100 @@ export function Swap() {
       </Table>
     }
 
-    <p>{isPurchase ? 'Purchase' : 'Sell'} amount (NFTs): {isPurchase ? <TextField onChange={e => dispatch(setAmount(e.target.value))} type='number'></TextField> : selectedNFTs.length}</p>
+    {/* <p>{isPurchase ? 'Purchase' : 'Sell'} amount (NFTs): {isPurchase ? <TextField onChange={e => dispatch(setAmount(e.target.value))} type='number'></TextField> : selectedNFTs.length}</p> */}
     <p>You {isPurchase ? 'pay' : 'get'}: {new BigNumber(total)?.dividedBy('1000000000000000000').toString()} ETH</p>
+    {
+      isPurchase ?
+        <p>Select the available NFTs below:</p>
+        :
+        <p>
+          Sell amount (NFTs): {selectedNFTs.length}
+          <br />
+          You get: {new BigNumber(total)?.dividedBy('1000000000000000000').toString()} ETH
+        </p>
+    }
+    {
+      isPurchase && allOffersPerPool && Object.values(allOffersPerPool).length > 0 ? <>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          flexFlow: 'row wrap',
+          maxHeight: 250,
+          overflow: 'scroll'
+        }}>{Object.values(allOffersPerPool)[0].length > 0 ?
+          // group
+          Object.entries(Object.values(allOffersPerPool)[0].reduce((p, c) => {
+            if (!p[c.poolAddress]) {
+              p[c.poolAddress] = [];
+            }
+            p[c.poolAddress].push(c);
+            return p;
+          }, [])).map(([k, v]) => {
+            return (
+              <>
+                <p style={{ fontWeight: 'bold', flexBasis: '100%' }}>{k}</p>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  flexFlow: 'row wrap',
+                  marginBottom: '1rem',
+                }}>
+                  {
+                    v.map(offer => {
+                      return <Panel
+                        onClick={() => {
+                          setSelectedBuyNfts(pre => ({
+                            ...pre,
+                            [k]: pre[k] ? pre[k].includes(offer.id) ? pre[k].filter(e => e !== offer.id) : [...pre[k], offer.id] : [offer.id]
+                          }));
+                        }}
+                        variant={!isInSelectedNFTs(v) ? 'inside' : 'well'}
+                        key={k + '|*|' + offer.id}
+                        style={{
+                          marginBottom: '0.5rem',
+                          padding: '0.5rem',
+                          height: 50,
+                          width: 100,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignContent: 'center',
+                        }}
+                      >
+                        {/* <img src={n.imageUrl} height="80%" /> */}
+                        <p style={{
+                          overflowX: 'hidden',
+                          overflowY: 'visible',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>#{offer.id}</p>
+
+                      </Panel>;
+                    })
+                  }
+                </div>
+              </>
+            );
+          })
+          : <>
+            <p style={{ textAlign: 'center', marginBottom: '0.5rem' }}>Loading...</p>
+            <LoadingIndicator isLoading />
+          </>}
+        </div><br></br></> : <></>
+    }
     {
       amount > 0 && isPurchase ? <>
         <Button disabled={new BigNumber(WETHAllowance.data?.toString())?.gt(total) || isWETHApproveLoading} onClick={() => writeWETHApprove?.()}>{isWETHApproveLoading? 'Approving Router For Trade...':'Approve Router for Trade'}</Button>
         <Button disabled={new BigNumber(WETHAllowance.data?.toString())?.lte(total) || isBuyNFTLoading} onClick={() => {
           writeBuyNFT?.()
         }}>{isBuyNFTLoading? 'Buying...': 'Buy'}</Button>
-        <p>Summary:</p>
+        {/* <p>Summary:</p>
         <p>{offers?.slice(0, !isPurchase ? selectedNFTs?.length : amount).length} NFTs available for purchase</p>
         {Object.keys(offersPerPool || {}).map(o =>
           <div key={o}>
             <p>[Pool {o}]</p>
             <p>IDs: {offersPerPool[o].map(e => <span key={`${o} ${e}`}>#{e}, </span>)}</p>
 
-          </div>)}
+          </div>)} */}
       </> : <></>
     }
     {nftCollectionAddress !== undefined && isNaN(total?.toNumber()) ? <>
@@ -287,7 +374,7 @@ export function Swap() {
         display: 'flex',
         flexDirection: 'row',
         flexFlow: 'row wrap',
-        maxHeight: 500,
+        maxHeight: 250,
         overflow: 'scroll'
       }}>{myNFTs.length > 0 ? myNFTs.map(n => {
         return <Panel
