@@ -14,7 +14,7 @@ import LSSVMRouterBuy from '../../abis/LSSVMRouterBuy.json'
 import { useApproveNFT } from "../../interactors/useApproveNFT";
 import { useDispatch, useSelector } from "react-redux";
 import { select, unselectAll } from "../../reducers/selectNFTSwap";
-import { setKeyword, setAmount, setIsPurchase } from "../../reducers/user";
+import { setKeyword, setIsPurchase } from "../../reducers/user";
 const { createAlchemyWeb3 } = require("@alch/alchemy-web3");
 
 const factoryAddress = {
@@ -53,22 +53,17 @@ export function Swap() {
    * User states
    */
   // TODO: Move to Redux
-  const { keyword, isPurchase, amount } = useSelector((state) => state.user)
+  const { keyword, isPurchase } = useSelector((state) => state.user)
   
   /**
    * Auto states
    */
   const [offers, setOffers] = React.useState()
   const [nfts, setNfts] = React.useState([])
-  const isInSelectedNFTs = (n) => selectedNFTs.indexOf(n.address + '|*|' + n.id + '|*|' + n.imageUrl + '|*|' + n.name) !== -1 
+  const isInSelectedNFTs = (n) => selectedNFTs.indexOf(n.address + '|*|' + n.id + '|*|' + n.imageUrl + '|*|' + n.name) !== -1;
   const [myNFTs, setMyNFTs] = React.useState([])
   const nftCollectionAddress = web3.utils.isAddress(keyword) ? keyword : nfts?.[0]?.address
-  const total = offers?.slice(0, !isPurchase ? selectedNFTs?.length : amount).reduce((p, c) => p.plus(c.spot), new BigNumber(0))
-  const offersPerPool = offers?.slice(0, !isPurchase ? selectedNFTs?.length : amount).reduce((p, o) => {
-    if (p[o.poolAddress]) p[o.poolAddress].push(o.id)
-    else p[o.poolAddress] = [o.id]
-    return p
-  }, {})
+  const total = offers?.slice(0, selectedNFTs?.length).reduce((p, c) => p.plus(c.spot), new BigNumber(0))
   const allOffersPerPool = offers?.reduce((p, c) => {
     if (!p[c.pool]) {
       p[c.pool] = [];
@@ -76,8 +71,6 @@ export function Swap() {
     p[c.pool].push(c);
     return p;
   }, {});
-  const [selectedBuyNfts, setSelectedBuyNfts] = React.useState({});
-  const nftsToBuy = Object.keys(selectedBuyNfts || {})?.map(address => ([address, selectedBuyNfts[address]]))
 
   /**
    * Wagmi calls
@@ -104,7 +97,14 @@ export function Swap() {
     addressOrName: routerAddress[chain?.id],
     contractInterface: LSSVMRouterBuy,
     functionName: 'swapETHToWETHForSpecificNFTs' ,
-    args: [ nftsToBuy,
+    args: [selectedNFTs?.map((sn, i) => [offers?.[i].poolAddress, sn?.split('|*|')[1]]).reduce((payload, offer) => {
+      const poolBucketInd = payload.findIndex(p => {
+        return p?.[0] == offer?.[0];
+      });
+      if (poolBucketInd !== -1) payload[poolBucketInd][1].push(offer[1]);
+      else payload.push([offer?.[0], [offer[1]]]);
+      return payload;
+    }, []),
     total?.toFixed(0), address, (Date.now() / 1000 + 600).toFixed(0), wethAddress[chain?.id]],
     overrides: {
       value: total?.toFixed(0) ,
@@ -132,7 +132,7 @@ export function Swap() {
 
   /**
    * Effects
-   */  
+   */
   // Logic to get Real-time offers
   React.useEffect(() => {
     if (!web3.utils.isAddress(keyword) && nfts?.length !== 1) return
@@ -193,15 +193,27 @@ export function Swap() {
         await sleep(30)
         poolsWithMeta.push(await poolPromise)
       }
-      const sortedOffers = poolsWithMeta.flatMap(p => {
-        return p.heldIds.map((e, i) => ({
-          poolAddress: p.poolAddress,
-          id: e,
+      const sortedOffers = await Promise.all(poolsWithMeta.flatMap(async p => {
+        return await Promise.all(p.heldIds.map(async (e, i) => {
+          const metadata = await web3.alchemy.getNftMetadata({
+            contractAddress: p.nft,
+            tokenId: e,
+          });
+          return {
+            ...metadata,
+            poolAddress: p.poolAddress,
+            id: e,
+            address: metadata?.contract.address.toLowerCase() || '',
+            imageUrl: metadata?.metadata?.image || '',
+            name: metadata?.title || '',
           spot: new BigNumber(p.spot)[isPurchase ? 'plus' : 'minus'](new BigNumber(p.delta).multipliedBy(i + 1)).multipliedBy(isPurchase ? new BigNumber(1.005) : new BigNumber(0.995))
-        }))
-      })
-      sortedOffers.sort((a, b) => {
-       return isPurchase? a.spot.minus(b.spot).toNumber() : b.spot.minus(a.spot).toNumber()
+          };
+        }
+        ));
+      })).then(arr => {
+        return arr.flat().sort((a, b) => {
+          return isPurchase ? a.spot.minus(b.spot).toNumber() : b.spot.minus(a.spot).toNumber();
+        })
       })
       setOffers(sortedOffers)
     }
@@ -230,23 +242,41 @@ export function Swap() {
     <Fieldset label='I am'>
       <Radio
         checked={isPurchase}
-        onClick={(e) => dispatch(setIsPurchase(true))}
+        onClick={(e) => {
+          dispatch(setIsPurchase(true));
+          dispatch(setKeyword(''));
+          dispatch(unselectAll());
+          setOffers([]);
+        }
+        }
         value={true}
         label='buying'
         name='buyorsell' />
       <Radio
         checked={!isPurchase}
-        onClick={(e) => dispatch(setIsPurchase(false))}
+        onClick={(e) => {
+          dispatch(setIsPurchase(false));
+          dispatch(setKeyword(''));
+          dispatch(unselectAll());
+          setOffers([]);
+        }}
         value={false}
         label='selling'
         name='buyorsell' />
     </Fieldset>
-    {nfts.length !== 1 ? <>Filter: <TextField placeholder="keyword or NFT Address" onChange={e => dispatch(setKeyword(e.target.value))}></TextField></> :
-      <Button onClick={() => {
-        setNfts([])
-        dispatch(setKeyword(''))
-      }}>Select again</Button>}
-    {web3.utils.isAddress(keyword) ? <></> :
+    <>Filter: <TextField placeholder="keyword or NFT Address" onChange={e => dispatch(setKeyword(e.target.value))} value={keyword}></TextField></>
+    {
+      nfts.length > 0 ?
+        <Button onClick={() => {
+          dispatch(unselectAll());
+        }}
+          style={{ marginTop: '10px', marginBottom: '10px' }}
+        >
+          Select again
+        </Button> :
+        <></>
+    }
+    {keyword !== '' && web3.utils.isAddress(keyword) ? <></> :
       <Table>
         <TableHead>
           <TableRow head>
@@ -269,18 +299,16 @@ export function Swap() {
       </Table>
     }
 
-    {/* <p>{isPurchase ? 'Purchase' : 'Sell'} amount (NFTs): {isPurchase ? <TextField onChange={e => dispatch(setAmount(e.target.value))} type='number'></TextField> : selectedNFTs.length}</p> */}
-    <p>You {isPurchase ? 'pay' : 'get'}: {new BigNumber(total)?.dividedBy('1000000000000000000').toString()} ETH</p>
+    {/* <p>{isPurchase ? 'Purchase' : 'Sell'} amount (NFTs): {isPurchase ? <TextField onChange={e => dispatch(setAmount(e.target.value))} type='number'></TextField> : selectedNFTs.length}</p> */} 
     {
       isPurchase ?
         <p>Select the available NFTs below:</p>
         :
         <p>
           Sell amount (NFTs): {selectedNFTs.length}
-          <br />
-          You get: {new BigNumber(total)?.dividedBy('1000000000000000000').toString()} ETH
         </p>
     }
+    <p>You {isPurchase ? 'pay' : 'get'}: {new BigNumber(total)?.dividedBy('1000000000000000000').toString()} ETH</p>
     {
       isPurchase && allOffersPerPool && Object.values(allOffersPerPool).length > 0 ? <>
         <div style={{
@@ -306,29 +334,28 @@ export function Swap() {
                   flexDirection: 'row',
                   flexFlow: 'row wrap',
                   marginBottom: '1rem',
+                  gap: '0.5rem'
                 }}>
                   {
                     v.map(offer => {
                       return <Panel
                         onClick={() => {
-                          setSelectedBuyNfts(pre => ({
-                            ...pre,
-                            [k]: pre[k] ? pre[k].includes(offer.id) ? pre[k].filter(e => e !== offer.id) : [...pre[k], offer.id] : [offer.id]
-                          }));
+                          dispatch(select(offer))
                         }}
-                        variant={!isInSelectedNFTs(v) ? 'inside' : 'well'}
+                        variant={!isInSelectedNFTs(offer) ? 'inside' : 'well'}
                         key={k + '|*|' + offer.id}
                         style={{
+                          cursor: 'pointer',
                           marginBottom: '0.5rem',
                           padding: '0.5rem',
-                          height: 50,
-                          width: 100,
+                          height: 180,
+                          width: 180,
                           display: 'flex',
                           flexDirection: 'column',
                           alignContent: 'center',
                         }}
                       >
-                        {/* <img src={n.imageUrl} height="80%" /> */}
+                        {offer.metadata ? <img src={offer.metadata.image} height="80%" /> : <></>}
                         <p style={{
                           overflowX: 'hidden',
                           overflowY: 'visible',
@@ -350,7 +377,7 @@ export function Swap() {
         </div><br></br></> : <></>
     }
     {
-      amount > 0 && isPurchase ? <>
+      isPurchase && total && total.toNumber() > 0 ? <>
         <Button disabled={new BigNumber(WETHAllowance.data?.toString())?.gt(total) || isWETHApproveLoading} onClick={() => writeWETHApprove?.()}>{isWETHApproveLoading? 'Approving Router For Trade...':'Approve Router for Trade'}</Button>
         <Button disabled={new BigNumber(WETHAllowance.data?.toString())?.lte(total) || isBuyNFTLoading} onClick={() => {
           writeBuyNFT?.()
@@ -375,7 +402,8 @@ export function Swap() {
         flexDirection: 'row',
         flexFlow: 'row wrap',
         maxHeight: 250,
-        overflow: 'scroll'
+        overflow: 'scroll',
+        gap: '0.5rem'
       }}>{myNFTs.length > 0 ? myNFTs.map(n => {
         return <Panel
           onClick={() => dispatch(select(n))}
@@ -406,15 +434,20 @@ export function Swap() {
         <LoadingIndicator isLoading />
       </>}
       </div><br></br>
-        <Button disabled={NFTAllowance || isApproveLoading} onClick={() => writeApproveNFT?.()}>{isApproveLoading ? 'Approving Router For Trade...': 'Approve Router for Trade'}</Button>
-        <Button disabled={!NFTAllowance || isSellNFTLoading} onClick={() => {
-          writeSellNFT?.()
-        }}>{isSellNFTLoading? 'Selling...': 'Sell'}</Button>
+        {
+          total && total.toNumber() > 0 ?
+            <>
+              <Button disabled={NFTAllowance || isApproveLoading} onClick={() => writeApproveNFT?.()}>{isApproveLoading ? 'Approving Router For Trade...' : 'Approve Router for Trade'}</Button>
+              <Button disabled={!NFTAllowance || isSellNFTLoading} onClick={() => {
+                writeSellNFT?.();
+              }}>{isSellNFTLoading ? 'Selling...' : 'Sell'}</Button>
+            </> : <></>
+        }
         <br></br>
         <p>You will receive WETH instead of ETH. Unwrap them to ETH here: <Anchor href="https://app.uniswap.org/#/swap?inputCurrency=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" target="_blank">https://app.uniswap.org/#/swap?inputCurrency=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2</Anchor></p></> : <></>
     }
     {
-      amount > 0 && offers?.length == 0 ? <p>No NFTs available for purchase</p> : <></>
+      isPurchase && offers?.length == 0 ? <p>No NFTs available for purchase</p> : <></>
     }
     {
       !isPurchase && offers?.length == 0 ? <p>No offers available</p> : <></>
